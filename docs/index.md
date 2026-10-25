@@ -83,7 +83,7 @@ reusable workflow then:
 6. Runs `terraform init` against the Spaces bucket and selects or creates the workspace `issue-<n>`.
 7. Runs `terraform apply`, which creates a generated SSH key, the droplet, a firewall that
    allows inbound TCP 22, 80 and 443 only, and, if a preview zone is set, an A record
-   `pr-<n>.<zone>`. Without a zone, the hostname is `pr-<n>-<ip-with-dashes>.nip.io`.
+   `pr-<n>.<zone>`. Without a zone, the hostname is `pr<n>-<ip-with-dashes>.nip.io`.
 8. Posts the first comment on the issue: "Blacksmith is working on this. Preview will be at
    …", with a link to the workflow run.
 9. Writes a job summary with the preview URL, the droplet IP, the workspace name and an SSH
