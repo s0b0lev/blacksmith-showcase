@@ -1,0 +1,30 @@
+# Blacksmith config for the showcase: one FastAPI service under app/, run with Docker Compose.
+version: 1
+label: blacksmith                 # trigger label; must match .github/workflows/blacksmith.yml
+branch_prefix: blacksmith/issue-  # work branch per issue
+droplet:
+  size: s-2vcpu-4gb               # one small service plus a headless browser
+  region: fra1
+  image: ubuntu-24-04-x64
+limits:
+  first_run_minutes: 60
+  review_round_minutes: 30
+  max_turns_per_stage: 150
+  lifetime_hours: 48              # the droplet destroys itself after two days
+setup:                            # run once by bootstrap, as the agent user, in repo root
+  - cd app && uv sync --frozen
+checks:                           # what "verify" must run; `soft: true` is reported, not required
+  - run: cd app && uv run ruff check . && uv run ruff format --check .
+    soft: true
+  - run: cd app && uv run pytest -q
+preview:
+  compose: docker-compose.yml
+  project: blacksmith-preview
+  build:                          # built from the work branch instead of using `image:`
+    web: app
+  routes:                        # Caddy routes, in order; targets are compose service:port
+    - { path: "/*", to: "web:8000" }
+  ready: "https://${PREVIEW_HOST}/api/health"
+  auth: basic                     # whole preview behind basic auth; credentials land in the PR body
+design:
+  figma: false

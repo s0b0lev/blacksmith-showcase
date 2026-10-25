@@ -1,0 +1,99 @@
+# Adopter workflow for s0b0lev/agentic-blacksmith.
+# Needs secrets DIGITALOCEAN_TOKEN, SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY,
+# CLAUDE_CODE_OAUTH_TOKEN, BLACKSMITH_GITHUB_TOKEN (and optionally FIGMA_API_KEY), and
+# variables BLACKSMITH_STATE_BUCKET and BLACKSMITH_PREVIEW_ZONE (may be empty for nip.io).
+# The label below must match `label:` in blacksmith.yml. Secrets are mapped explicitly:
+# `secrets: inherit` only works within one organization or enterprise.
+#
+# The template has no v1 tag yet, so both `uses:` lines and `template_ref` are pinned to
+# master. Switch them to v1 once the tag is published.
+name: blacksmith
+
+on:
+  issues:
+    types: [labeled, unlabeled]
+  pull_request:
+    types: [closed]
+  repository_dispatch:
+    types: [blacksmith-self-destruct]
+
+jobs:
+  spin-up:
+    if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'blacksmith'
+    uses: s0b0lev/agentic-blacksmith/.github/workflows/spin-up.yml@master
+    with:
+      issue: ${{ github.event.issue.number }}
+      template_ref: master
+      state_bucket: ${{ vars.BLACKSMITH_STATE_BUCKET }}
+      preview_zone: ${{ vars.BLACKSMITH_PREVIEW_ZONE }}
+    secrets:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      BLACKSMITH_GITHUB_TOKEN: ${{ secrets.BLACKSMITH_GITHUB_TOKEN }}
+      FIGMA_API_KEY: ${{ secrets.FIGMA_API_KEY }}
+
+  resolve:
+    if: >-
+      (github.event_name == 'issues' && github.event.action == 'unlabeled' && github.event.label.name == 'blacksmith')
+      || (github.event_name == 'pull_request' && github.event.action == 'closed' && startsWith(github.event.pull_request.head.ref, 'blacksmith/issue-'))
+      || github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      issue: ${{ steps.issue.outputs.issue }}
+    steps:
+      - name: Resolve issue number
+        id: issue
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PAYLOAD_ISSUE: ${{ github.event.client_payload.issue }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          case "$EVENT_NAME" in
+            issues) n="$ISSUE_NUMBER" ;;
+            pull_request) n="${HEAD_REF#blacksmith/issue-}" ;;
+            repository_dispatch) n="$PAYLOAD_ISSUE" ;;
+            *) n="" ;;
+          esac
+          if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::cannot resolve an issue number from the $EVENT_NAME event (got '$n')"
+            exit 1
+          fi
+          # Removing the label stops work only before a pull request exists; after that,
+          # closing the pull request tears the droplet down.
+          if [ "$EVENT_NAME" = issues ]; then
+            open="$(gh pr list --repo "$REPO" --head "blacksmith/issue-$n" --state open --json number --jq length)"
+            if [ "$open" -ge 1 ]; then
+              echo "::notice::issue #$n has an open pull request; close it to tear the droplet down"
+              echo "issue=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "issue=$n" >> "$GITHUB_OUTPUT"
+
+  tear-down:
+    needs: resolve
+    if: >-
+      ((github.event_name == 'issues' && github.event.action == 'unlabeled' && github.event.label.name == 'blacksmith')
+      || (github.event_name == 'pull_request' && github.event.action == 'closed' && startsWith(github.event.pull_request.head.ref, 'blacksmith/issue-'))
+      || github.event_name == 'repository_dispatch')
+      && needs.resolve.outputs.issue != ''
+    uses: s0b0lev/agentic-blacksmith/.github/workflows/tear-down.yml@master
+    with:
+      issue: ${{ fromJSON(needs.resolve.outputs.issue) }}
+      template_ref: master
+      state_bucket: ${{ vars.BLACKSMITH_STATE_BUCKET }}
+      preview_zone: ${{ vars.BLACKSMITH_PREVIEW_ZONE }}
+    secrets:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      BLACKSMITH_GITHUB_TOKEN: ${{ secrets.BLACKSMITH_GITHUB_TOKEN }}
+      FIGMA_API_KEY: ${{ secrets.FIGMA_API_KEY }}
