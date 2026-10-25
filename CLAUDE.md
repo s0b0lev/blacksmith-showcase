@@ -27,7 +27,7 @@ From the repository root, `docker compose up --build` runs the same thing in a c
 
 ## Conventions
 
-- Notes live in memory on purpose; do not add a database unless an issue asks for one.
+- Notes, users and login sessions live in memory on purpose (a restart clears them); do not add a database unless an issue asks for one.
 - Keep dependencies in `app/pyproject.toml` and refresh `app/uv.lock` with `uv lock`
   whenever they change; the Dockerfile installs with `--frozen`.
 - Every behaviour change gets a test in `app/tests/`.
