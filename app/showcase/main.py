@@ -115,10 +115,11 @@ class Accounts:
         self.users[email] = user
         token = secrets.token_urlsafe(32)
         self.verify_tokens[token] = email
+        base = os.environ.get("BASE_URL", "").rstrip("/")
         outbox.send(
             email,
             "Verify your email",
-            f"Hi {first_name},\n\nVerify your account: {os.environ.get('BASE_URL', '').rstrip('/')}/verify?token={token}\n",
+            f"Hi {first_name},\n\nVerify your account: {base}/verify?token={token}\n",
         )
         return user
 
