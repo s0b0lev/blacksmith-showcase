@@ -159,3 +159,4 @@ def test_spa_shell(client: TestClient, anon: TestClient) -> None:
         assert "v-html" not in res.text
         assert "alice" not in res.text
     assert "bootstrap@5.3.3/dist/css/bootstrap.min.css" in anon.get("/").text
+    assert 'data-bs-theme="dark"' in anon.get("/").text
