@@ -1,20 +1,26 @@
-"""A tiny in-memory notes app: one HTML page and a small JSON API."""
+"""A tiny in-memory notes app: a JSON API under /api/v1 and a Vue SPA shell at /."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 from dataclasses import dataclass, field
-from html import escape
+from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import BaseModel
 
-BOOTSTRAP_CSS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-BOOTSTRAP_JS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+INDEX_HTML = (Path(__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
 
-app = FastAPI(title="Blacksmith showcase")
+app = FastAPI(
+    title="Blacksmith showcase",
+    docs_url="/api/v1/docs",
+    openapi_url="/api/v1/openapi.json",
+    redoc_url=None,
+)
 
 
 @dataclass
@@ -98,182 +104,102 @@ class Users:
 users = Users()
 
 
-@app.get("/api/health")
-def health() -> dict[str, str]:
+class Credentials(BaseModel):
+    username: str = ""
+    password: str = ""
+
+
+class NoteIn(BaseModel):
+    text: str = ""
+
+
+def session_user(request: Request) -> str | None:
+    return users.current(request.cookies.get(SESSION_COOKIE))
+
+
+def require_user(request: Request) -> str:
+    user = session_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    return user
+
+
+def session_response(username: str, status_code: int) -> Response:
+    res = Response(
+        content=json.dumps({"username": username}),
+        media_type="application/json",
+        status_code=status_code,
+    )
+    res.set_cookie(SESSION_COOKIE, users.login(username), httponly=True, samesite="lax")
+    return res
+
+
+v1 = APIRouter(prefix="/api/v1")
+
+
+@v1.get("/", include_in_schema=False)
+def v1_root() -> RedirectResponse:
+    return RedirectResponse(url="/api/v1/docs", status_code=307)
+
+
+@v1.get("/health")
+def health_v1() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/notes")
-def list_notes() -> dict[str, object]:
+@v1.post("/auth/register", status_code=201)
+def register(creds: Credentials) -> Response:
+    try:
+        name = users.register(creds.username, creds.password)
+    except ValueError as exc:
+        status = 409 if "taken" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    return session_response(name, 201)
+
+
+@v1.post("/auth/login")
+def login(creds: Credentials) -> Response:
+    name = users.authenticate(creds.username, creds.password)
+    if name is None:
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    return session_response(name, 200)
+
+
+@v1.get("/auth/me")
+def me(user: str = Depends(require_user)) -> dict[str, str]:
+    return {"username": user}
+
+
+@v1.post("/auth/logout", status_code=204)
+def logout(request: Request) -> Response:
+    users.logout(request.cookies.get(SESSION_COOKIE))
+    res = Response(status_code=204)
+    res.delete_cookie(SESSION_COOKIE)
+    return res
+
+
+@v1.get("/notes")
+def list_notes(_: str = Depends(require_user)) -> dict[str, object]:
     return {"notes": list(store.notes), "count": len(store.notes)}
 
 
-@app.post("/api/notes", status_code=201)
-def create_note(payload: dict[str, str]) -> dict[str, str]:
+@v1.post("/notes", status_code=201)
+def create_note(payload: NoteIn, _: str = Depends(require_user)) -> dict[str, str]:
     try:
-        text = store.add(payload.get("text", ""))
+        text = store.add(payload.text)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"text": text}
 
 
-def count_label(n: int) -> str:
-    if n == 0:
-        return "No notes yet"
-    return "1 note" if n == 1 else f"{n} notes"
+app.include_router(v1)
 
 
-def current_user(request: Request) -> str | None:
-    return users.current(request.cookies.get(SESSION_COOKIE))
+@app.get("/api/health", include_in_schema=False)
+def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
-def redirect(url: str) -> RedirectResponse:
-    return RedirectResponse(url=url, status_code=303)
-
-
-def start_session(username: str) -> RedirectResponse:
-    res = redirect("/")
-    res.set_cookie(SESSION_COOKIE, users.login(username), httponly=True, samesite="lax")
-    return res
-
-
-def page(title: str, body: str, user: str | None = None) -> str:
-    navbar = ""
-    if user is not None:
-        navbar = f"""
-  <nav class="navbar navbar-expand bg-body-tertiary border-bottom mb-4">
-    <div class="container">
-      <a class="navbar-brand" href="/">Blacksmith showcase</a>
-      <div class="dropdown ms-auto">
-        <button class="btn btn-outline-secondary dropdown-toggle" type="button"
-                data-bs-toggle="dropdown" aria-expanded="false">{escape(user)}</button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="/profile">Profile</a></li>
-          <li>
-            <form method="post" action="/logout" class="m-0">
-              <button class="dropdown-item" type="submit">Logout</button>
-            </form>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </nav>"""
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escape(title)} - Blacksmith showcase</title>
-  <link href="{BOOTSTRAP_CSS}" rel="stylesheet">
-</head>
-<body>{navbar}
-  <main class="container" style="max-width: 40rem">
-{body}
-  </main>
-  <script src="{BOOTSTRAP_JS}"></script>
-</body>
-</html>"""
-
-
-def auth_page(kind: str, error: str = "", status_code: int = 200) -> HTMLResponse:
-    login = kind == "login"
-    title = "Log in" if login else "Register"
-    alert = f'<div class="alert alert-danger" role="alert">{escape(error)}</div>' if error else ""
-    other = (
-        'No account? <a href="/register">Register</a>'
-        if login
-        else 'Already registered? <a href="/login">Log in</a>'
-    )
-    body = f"""    <h1 class="h3 mb-3">{title}</h1>
-    {alert}
-    <form method="post" action="/{kind}">
-      <div class="mb-3">
-        <label class="form-label" for="username">Username</label>
-        <input class="form-control" id="username" name="username" required autofocus>
-      </div>
-      <div class="mb-3">
-        <label class="form-label" for="password">Password</label>
-        <input class="form-control" id="password" name="password" type="password" required>
-      </div>
-      <button class="btn btn-primary w-100" type="submit">{title}</button>
-    </form>
-    <p class="mt-3">{other}</p>"""
-    return HTMLResponse(page(title, body), status_code=status_code)
-
-
-@app.get("/login", response_class=HTMLResponse, response_model=None)
-def login_page(request: Request) -> Response:
-    if current_user(request):
-        return redirect("/")
-    return auth_page("login")
-
-
-@app.post("/login", response_model=None)
-def login(username: str = Form(""), password: str = Form("")) -> Response:
-    name = users.authenticate(username, password)
-    if name is None:
-        return auth_page("login", "Invalid username or password.", 401)
-    return start_session(name)
-
-
-@app.get("/register", response_class=HTMLResponse, response_model=None)
-def register_page(request: Request) -> Response:
-    if current_user(request):
-        return redirect("/")
-    return auth_page("register")
-
-
-@app.post("/register", response_model=None)
-def register(username: str = Form(""), password: str = Form("")) -> Response:
-    try:
-        name = users.register(username, password)
-    except ValueError as exc:
-        status = 409 if "taken" in str(exc) else 400
-        return auth_page("register", str(exc), status)
-    return start_session(name)
-
-
-@app.post("/logout")
-def logout(request: Request) -> RedirectResponse:
-    users.logout(request.cookies.get(SESSION_COOKIE))
-    res = redirect("/login")
-    res.delete_cookie(SESSION_COOKIE)
-    return res
-
-
-@app.get("/profile", response_class=HTMLResponse, response_model=None)
-def profile(request: Request) -> Response:
-    user = current_user(request)
-    if user is None:
-        return redirect("/login")
-    body = f"""    <h1 class="h3 mb-3">Profile</h1>
-    <p>Signed in as <strong id="profile-username">{escape(user)}</strong></p>"""
-    return HTMLResponse(page("Profile", body, user))
-
-
-@app.get("/", response_class=HTMLResponse, response_model=None)
-def index(request: Request) -> Response:
-    user = current_user(request)
-    if user is None:
-        return redirect("/login")
-    items = "".join(f'<li class="list-group-item">{escape(n)}</li>' for n in store.notes)
-    items = items or '<li class="list-group-item text-muted"><em>No notes yet.</em></li>'
-    body = f"""    <h1 class="h3">Notes</h1>
-    <p id="count" class="text-muted">{count_label(len(store.notes))}</p>
-    <form method="post" action="/notes" class="input-group mb-3">
-      <input class="form-control" name="text" placeholder="Write a note" required autofocus>
-      <button class="btn btn-primary" type="submit">Add</button>
-    </form>
-    <ul id="notes" class="list-group">{items}</ul>"""
-    return HTMLResponse(page("Notes", body, user))
-
-
-@app.post("/notes")
-def add_note_form(request: Request, text: str = Form(...)) -> RedirectResponse:
-    if current_user(request) is None:
-        return redirect("/login")
-    try:
-        store.add(text)
-    except ValueError:
-        pass
-    return redirect("/")
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def index() -> str:
+    return INDEX_HTML
