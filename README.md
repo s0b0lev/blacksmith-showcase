@@ -11,8 +11,9 @@ spins up where Claude Code plans, builds, previews, verifies and opens a pull re
   workflows. Both are pinned to `@master` (with `template_ref: master`) until the template
   publishes its `v1` tag.
 - `blacksmith.yml` tells the droplet how to set up (`uv sync`), what to check (ruff is soft,
-  pytest is required) and how to preview (`docker-compose.yml`, service `web` on port 8000,
-  everything behind basic auth).
+  pytest is required), how to preview (`docker-compose.yml`, service `web` on port 8000,
+  everything behind basic auth), and where to ship logs and metrics (Grafana Cloud; every run
+  gets a public dashboard linked from the issue and the pull request).
 - `app/` is the app itself. See [CLAUDE.md](CLAUDE.md) for commands and conventions.
 
 ## One-time setup still needed on GitHub
@@ -26,6 +27,8 @@ to create the tokens, then in Settings → Secrets and variables → Actions add
 | `DIGITALOCEAN_TOKEN` | DigitalOcean API token |
 | `SPACES_ACCESS_KEY_ID`, `SPACES_SECRET_ACCESS_KEY` | DigitalOcean Spaces key pair |
 | `CLAUDE_CODE_OAUTH_TOKEN` | output of `claude setup-token` |
+| `GRAFANA_CLOUD_TOKEN` | Grafana Cloud access-policy token with `logs:write` and `metrics:write` (the droplet pushes logs and metrics with it) |
+| `GRAFANA_API_TOKEN` | Grafana service-account token, Admin role (the workflow creates and deletes the per-issue dashboard with it) |
 
 | Variable | Value |
 |---|---|

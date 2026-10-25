@@ -207,6 +207,7 @@ that point. The work branch is left for you to merge or delete.
 | When | Where | What |
 |---|---|---|
 | ~2 min after labelling | Issue | "Blacksmith is working on this. Preview will be at …" from the workflow |
+| ~2 min | Issue | The same comment carries "Live dashboard: …", a public Grafana dashboard with the runner's events, the agent's live session stream, container logs and droplet metrics |
 | ~10 min | Issue | Progress comment gains a `### Plan` section with acceptance criteria and chosen answers to open questions |
 | During the build | Repository | Commits appear on `blacksmith/issue-<n>`, authored `blacksmith[bot]` |
 | After the build | Issue | Progress comment gains "Preview is up at …" with the login |
