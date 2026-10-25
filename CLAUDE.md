@@ -7,7 +7,8 @@ open a pull request.
 
 ## Layout
 
-- `app/showcase/main.py` — the whole app: HTML page at `/`, JSON API under `/api/`.
+- `app/showcase/main.py` — the whole backend: JSON API under `/api/v1/` (Swagger at `/api/v1/docs`), SPA shell at `/`.
+- `app/showcase/static/index.html` — the Vue 3 (CDN) single-page UI that calls the API.
 - `app/tests/` — pytest tests using FastAPI's `TestClient`.
 - `app/Dockerfile`, `docker-compose.yml` — the service the preview runs (port 8000).
 - `blacksmith.yml`, `.github/workflows/blacksmith.yml` — template configuration.
