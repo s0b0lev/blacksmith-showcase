@@ -37,8 +37,8 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/notes")
-def list_notes() -> dict[str, list[str]]:
-    return {"notes": list(store.notes)}
+def list_notes() -> dict[str, object]:
+    return {"notes": list(store.notes), "count": len(store.notes)}
 
 
 @app.post("/api/notes", status_code=201)
@@ -48,6 +48,12 @@ def create_note(payload: dict[str, str]) -> dict[str, str]:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"text": text}
+
+
+def count_label(n: int) -> str:
+    if n == 0:
+        return "No notes yet"
+    return "1 note" if n == 1 else f"{n} notes"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -70,6 +76,7 @@ def index() -> str:
 </head>
 <body>
   <h1>Notes</h1>
+  <p id="count">{count_label(len(store.notes))}</p>
   <form method="post" action="/notes">
     <input name="text" placeholder="Write a note" required autofocus>
     <button type="submit">Add</button>
