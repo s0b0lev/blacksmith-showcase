@@ -35,6 +35,17 @@ to create the tokens, then in Settings → Secrets and variables → Actions add
 The `blacksmith` label already exists. Once the secrets are in place, open an issue describing
 a small change to the notes app and add the label.
 
+## API: accounts
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/register` | JSON `first_name`, `last_name`, `email`, `password`. Returns 201 and sends a verification link (`{BASE_URL}/verify?token=...`); 422 on invalid input, 409 if the email is taken. |
+| `GET /verify?token=...` | Activates the account from the emailed link; 400 if the token is invalid or already used. |
+| `POST /api/login` | JSON `email`, `password`. Returns a bearer `token`; 401 on bad credentials, 403 if the email is not verified. |
+
+`GET /api/me` with `Authorization: Bearer <token>` returns the logged-in user. Users and
+sessions are kept in memory, like notes.
+
 ## Running locally
 
 ```sh
