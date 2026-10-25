@@ -3,8 +3,8 @@ version: 1
 label: blacksmith                 # trigger label; must match .github/workflows/blacksmith.yml
 branch_prefix: blacksmith/issue-  # work branch per issue
 droplet:
-  size: s-4vcpu-8gb               # s-2vcpu-4gb is often out of stock in fra1 (DO 422 "Size is not available")
-  region: fra1
+  size: s-2vcpu-4gb               # one small service plus a headless browser
+  region: ams3                    # fra1 had no capacity for s-2vcpu-4gb or s-4vcpu-8gb on 2026-10-25
   image: ubuntu-24-04-x64
 limits:
   first_run_minutes: 60
