@@ -28,3 +28,12 @@ preview:
   auth: basic                     # whole preview behind basic auth; credentials land in the PR body
 design:
   figma: false
+observability:                    # Grafana Cloud: logs + metrics from boot, one public dashboard per issue
+  enabled: true
+  loki_url: https://logs-prod-028.grafana.net/loki/api/v1/push
+  loki_user: "1849478"
+  prometheus_url: https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push
+  prometheus_user: "3707627"
+  grafana_url: https://graciousviper3130.grafana.net
+  public: auto                    # shared without login because this repository is public
+  agent_stream: true              # Claude Code's live session stream is on the dashboard
